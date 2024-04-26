@@ -1,0 +1,144 @@
+{
+    "generators": [
+        {
+            "topic": "customers",
+            "value": {
+                "name": {
+                    "_gen": "string",
+                    "expr": "#{Name.full_name}"
+                },
+                "email":
+                {
+                    "_gen": "string", "expr": "#{Internet.email_address}"
+                }   
+            }
+        },
+        {
+            "topic": "shoppingCarts",
+            "fork": {
+                "key": {
+                    "_gen": "lookup",
+                    "topic": "customers",
+                    "path": ["value", "email"]
+                },
+                "stagger": {
+                    "ms": 1000
+                }
+            },
+            "key": {
+                "_gen": "var", "var": "forkKey"
+            },
+            "value": {
+                "timestamp": {
+                    "_gen": "now"
+                },
+                "creditCardNumber": { "_gen": "string", "expr": "#{Business.creditCardNumber}" },
+                "discountPercent": {
+                    "_gen": "uniformDistribution",
+                    "bounds": [0, 10],
+                    "decimals": 0
+                }
+            },
+            "stateMachine": {
+                "_gen": "stateMachine",
+                "initial": "OPEN",
+                "transitions": {
+                    "OPEN": {
+                        "_gen": "oneOf",
+                        "choices": ["OPEN", "MODIFIED", "CANCELLED"]
+                    },
+                    "MODIFIED": {
+                        "_gen": "oneOf",
+                        "choices": ["MODIFIED", "CHECKED_OUT", "CANCELLED"]
+                    }
+                },
+                "states": {
+                    "OPEN": {
+                        "value": {
+                            "cartState": "OPEN"
+                        }
+                    },
+                    "MODIFIED": {
+                        "value": {
+                            "cartState": "MODIFIED",
+                            "items": {
+                                "_gen": "repeatedly",
+                                "n": {
+                                    "_gen": "uniformDistribution",
+                                    "bounds": [1, 3]
+                                },
+                                "target": {
+                                    "_gen": "string",
+                                    "expr": "#{Commerce.productName}"
+                                }
+                            },
+                            "lastModified" : { "_gen": "now" },
+                            "additionalCost": {
+                                "_gen": "normalDistribution",
+                                "mean": 50,
+                                "sd": 10,
+                                "decimals": 2
+                            }
+                        }
+                    },
+                    "CHECKED_OUT": {
+                        "value": {
+                            "cartState": "CHECKED_OUT"
+                        }
+                    },
+                    "CANCELLED": {
+                        "value": {
+                            "cartState": "CANCELLED"
+                        }
+                    }
+                }
+            },
+            "localConfigs": {
+                "throttle": {
+                    "ms": {
+                        "_gen": "normalDistribution",
+                        "mean": 60000,
+                        "sd": 10000
+                    }
+                }
+            }
+
+        },
+        {
+            "topic": "shoppingCartItems",
+            "value": {
+                "orderId": { "_gen": "uuid" },
+                "customerId": {
+                    "_gen": "lookup",
+                    "topic": "shoppingCarts",
+                    "path": ["key", "cartId"]
+                },
+                "orderNumber": {
+                    "_gen": "sequentialInteger"
+                },
+                "product": { "_gen": "string", "expr": "#{Commerce.productName}" },
+                "quantity": { "_gen": "integer", "n": {  "_gen" : "normalDistribution",
+                "mean" : 5,
+                "sd" : 1}},
+                "cost": {
+                    "_gen": "normalDistribution",
+                    "mean": 100,
+                    "sd": 20
+                },
+                "description": { "_gen": "string", "expr": "#{Lorem.paragraph}" },
+                "timestamp": { "_gen": "now" }
+            }
+            
+        }
+    ],
+    "connections": {
+        "kafka": {
+            "kind": "kafka",
+            "producerConfigs": {
+                "bootstrap.servers": "redpanda:9092",
+                "key.serializer": "io.shadowtraffic.kafka.serdes.JsonSerializer",
+                "value.serializer": "io.shadowtraffic.kafka.serdes.JsonSerializer"
+            }
+        }
+    }
+}

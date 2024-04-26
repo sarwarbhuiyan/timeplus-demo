@@ -1,0 +1,6 @@
+create external stream shopping_carts(raw string) settings type='kafka',brokers='redpanda:9092',topic='shoppingCarts'
+
+
+
+
+create materialized view latest_cart_status  as with shopping_cart_sessions as (select _message_key as email, to_datetime64(raw:timestamp, 3) as timestamp, raw:cartState as state from shopping_carts) select latest(state) as latest_state, window_start as w_start, window_end as w_end, email from session(shopping_cart_sessions, timestamp, 3m, state='OPEN', state='CANCELLED' or state='CHECKED_OUT' )  partition by email group by w_start, w_end
